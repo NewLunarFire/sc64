@@ -1,0 +1,11 @@
+# Tools folders
+.setup/
+bass-ubuntu/
+rn64crc/
+sc64-deployer/
+
+# Hex files from diff tool
+*.hex
+
+# Compiled roms
+*.z64

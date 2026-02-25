@@ -1,0 +1,9 @@
+# VSCode files
+*.code-workspace
+
+# Python generated files
+**/__pycache__/**
+venv/**
+
+# Binary files
+*.bin
