@@ -12,16 +12,13 @@ class PacketType(Enum):
     ERR = 2
     PKT = 3
 
-
-def print_packet(ptype, id, data):
-    print(f"{ptype.name} {chr(id)} ({len(data)} bytes) {data}")
-
 class Sc64Comm:
     def __init__(self):
         self.state = CommState.BEGIN
         self.id = None
         self.ptype = None
         self.running_buffer = None
+        self.callbacks = []
 
     def decode(self, data):
         ptr = 0
@@ -60,9 +57,9 @@ class Sc64Comm:
                     self.running_buffer = data[ptr:]
                     return
 
-                self.length = struct.unpack('>I', data[ptr:ptr+4])[0] - 4
+                self.length = struct.unpack('>I', data[ptr:ptr+4])[0]
                 self.state = CommState.READ_DATA
-                ptr += 8
+                ptr += 4
             elif self.state == CommState.READ_DATA:
                 if remaining < self.length:
                     self.running_buffer = data[ptr:]
@@ -71,13 +68,17 @@ class Sc64Comm:
                 self.data = data[ptr:ptr+self.length]
                 self.state = CommState.BEGIN
                 ptr += self.length
-                print_packet(self.ptype, self.id, self.data)
+
+                for cb in self.callbacks:
+                    cb(self.ptype, self.id, self.data)
             else:
                 self.state = CommState.BEGIN
                 ptr += 1
 
         self.running_buffer = None
 
+    def add_callback(self, cb):
+        self.callbacks.append(cb)
 
 def main():
     comm = Sc64Comm()

@@ -1,89 +1,12 @@
 arch n64.cpu
 endian msb
 
-include "lib/n64.inc" // Include N64 Definitions
-include "lib/oot.inc" // Include oot definitions
-include "lib/sc64.inc" // Include Summercart 64 definitions
+include "lib/n64.inc"       // Include N64 Definitions
+include "lib/oot.inc"       // Include oot definitions
+include "lib/sc64.inc"      // Include Summercart 64 definitions
+include "lib/macros.inc"    // Macros
+include "lib/variables.inc" // Variables related to hooking / dmadata
 
-macro load_to_register(variable register, variable value) {
-    if value > $FFFF {
-        variable remainder = value & 0xFFFF
-
-        if remainder > 0x8000 {
-            lui register, (value >> 16) + 1
-        } else {
-            lui register, (value >> 16)
-        }
-
-        addiu register,register, remainder
-    } else {
-        addiu register,r0,value
-    }
-}
-
-constant dmadata = $00007430
-constant dmadata_index = 1510
-constant hook_point = $800A1F74
-constant dma_load_file = $80000DF0
-constant os_init_stack = $80001890
-constant os_create_thread = $80002F20
-constant os_start_thread = $80005EC0
-constant __osPiGetAccess = $80001DB0
-constant __osPiRelAccess = $80001DF4
-
-macro lock_cart() {
-    jal __osPiGetAccess
-    nop
-
-    addiu   v1, r0, $FFFE
-    mfc0    v0, 12
-    and     v1, v0, v1
-    mtc0    v1, 12
-    lui     s1, $8048
-    andi    v0, v0, $0001
-    sw      v0, $cf90 (s1)
-    lui     v0, $a460
-    lw      v1, $0014 (v0)         // (pi_bsd_dom1_lat_reg)
-    lui     a1, $8048
-    sw      v1, $cf98 (a1)
-    lw      v0, $0018 (v0)         // (pi_bsd_dom1_pwd_reg)
-    lui     a0, $8048
-    sw      v0, $cf94 (a0)
-}
-
-macro unlock_cart() {
-    lui     a0, $8048
-    lui     v1, $a460
-    lw      v0, $cf98 (a0)
-    sw      v0, $0014 (v1)         // (pi_bsd_dom1_lat_reg)
-    lw      v0, $cf94 (a0)
-    jal     __osPiRelAccess
-    sw      v0, $0018 (v1)         // (pi_bsd_dom1_pwd_reg)
-    lw      v0, $cf90 (s1)
-    addiu   a0, r0, $fffe
-    andi    v0, v0, $0001
-    mfc0    v1, 12
-    and     v1, v1, a0
-    or      v0, v0, v1
-    mtc0    v0, 12
-}
-
-
-macro pi_wait(variable reg1, variable reg2) {
-    lui     reg2, $a460
-loop{#}:
-    lw      reg1, $0010 (reg2)         // (pi_status_reg)
-    andi    reg1, reg1, $0003
-    bnez    reg1, loop{#}
-}
-
-// Thread Start Code
-constant sc64_thread_vrom = $0347e040
-constant sc64_thread_vram = $80400000
-constant sc64_stack_context = $80408000
-constant sc64_stack_start = $80500000
-constant sc64_stack_end = $80500500
-constant os_thread_pointer = $80500700
 
 origin sc64_thread_vrom
 base sc64_thread_vram
@@ -94,7 +17,7 @@ sc64_section_start:
 sc64_thread:
 // Save registers
 addiu sp, sp, -$20
-sw ra, $0014(sp)
+sw ra, $001C(sp)
 
 sc64_probe:
 lock_cart()
@@ -119,49 +42,30 @@ load_to_register(t2, SC64_IDENT)
 bne s2,t2,sc64_probe
 nop
 
+// Clear the receive buffer
+load_to_register(t0, SC64_BUFFER_BASE)
+addu t1,r0,r0
+
+memclr_start:
+addu t2,t0,t1
+pi_write_ind(r0, t2)
+addiu t1,t1,4
+subiu t3,t1,$0100
+bne t3,r0,memclr_start
+nop
+
+// Write BOOT to buffer
+load_to_register(t1, $424F4F54) // BOOT
+pi_write(t1, SC64_BUFFER_BASE + $0120)
+
+mfc0 s4, Count
+srl s4,s4,27
+
 sc64_main_loop:
-// Convert SC64 response to text
-addiu t4,r0,32
-add t5,r0,r0
-
-loop1_start:
-    dsll t5,t5,8
-    addiu t4,t4,-4
-    srlv t6,s2,t4
-    andi t6,t6,$F
-    addiu t6,t6,$9A
-    bgtz t4, loop1_start
-    dadd t5,t5,t6
-
-// Store result on stack
-sdl t5, $0000 (sp)
-sw t5, $0004 (sp)
-
-//add s0,r0,t5
-
 // Link tunic color (801DAB6C)
 lui t3, $801E
-addiu t0,r0,4
+addiu t0,r0,5
 sb t0, $AB6C(t3)
-
-// Overwrite player name
-lui t3, $8012
-lw t0, $0000 (sp)
-sw t0, $A5F4(t3)
-lw t0, $0004(sp)
-sw t0, $A5F8(t3)
-
-//sh t0, $A640(t3) // Change equipment
-
-// lock_cart()
-
-// pi_wait(v0, v1)
-// lui t0, SC64_PREFIX
-// sw r0, AUX (t0)
-
-// // Load rupee count
-// lui t3, $8012
-// lw s3, $A604(t3) // Rupee Counter
 
 // Read USB status
 addiu a0,r0,CMD_USB_READ_STATUS
@@ -169,122 +73,280 @@ addu a1,r0,r0
 jal sc64_run_command
 addu a2,r0,r0
 
-beq v1,r0,+
-// Receive USB data
-addiu a0,r0,CMD_USB_READ
-lui a1,$BFFE
-jal sc64_run_command
-addu a2,v1,r0
-
-// Get the memory address to read
-lw t0, $0000(a1)
-
-// (t0 & 0x003FFFFC) | 0x80000000 
-lui t1,$0040
-addiu t1,t1,$FFFC
-and t0,t0,t1
-lui t1,$8000
-or t0,t0,t1
-
-lw t1, $0000(t0)
-sw t1, $0004(a1)
-
-// Write back to USB
-addiu a0,r0,CMD_USB_WRITE
-lui a1,$BFFE
-jal sc64_run_command
-addiu a2,r0,8
-+;
-
-// load_to_register(t1, $5F534352)
-
-// pi_wait(t8, t9)
-// sw t1, AUX (t2) // Write "_SCR"
-
-// pi_wait(t8, t9)
-// sw t0, AUX(t2) // Write SCR
-
-// load_to_register(t1, $52535030)
-// pi_wait(t8, t9)
-// sw t1, AUX (t2) // Write "RSP0"
-
-// pi_wait(t8, t9)
-// sw v0, AUX(t2) // Write RSP0
-
-// addiu t1,t1,1
-// pi_wait(t8, t9)
-// sw t1, AUX (t2) // Write "RSP1"
-
-// pi_wait(t8, t9)
-// sw v1, AUX(t2) // Write RSP1
-
-// unlock_cart()
-
-// jal $800058B0 // osYieldThread
-// nop
-
-// Wait for approx. a second
-// mfc0 t0, 9 // Copy count to t0
-// srl t0, 12
-// wait_loop:
-// mfc0 t1, 9 // Copy count to t1
-// srl t1, 12
-// beq t0,t1,wait_loop
-// nop
-
-
-j sc64_main_loop
-
+bne t0,r0,cmd_handle_end
+nop
+addiu t1,r0,1
+bne v0,t1,cmd_handle_end
+nop
+beq v1,r0,cmd_handle_end
 nop
 
+addu s0,r0,v1 // Save bytes read to s0
+
+addu a0,r0,s0
+jal sc64_recv_usb
+nop
+
+pi_read(t0, SC64_BUFFER_BASE)
+sw t0, $0010(sp)
+
+srl t3,t0,24 // Command byte
+srl t4,t0,16
+and t4,t4,$00FF // Frame id
+
+pi_write(t3, SC64_BUFFER_BASE + $0124)
+pi_write(t4, SC64_BUFFER_BASE + $0128)
+
+load_to_register(t2, $0045) // E
+beq t3,t2,cmd_handle_echo
+load_to_register(t2, $0052) // R
+beq t3,t2,cmd_handle_read
+load_to_register(t2, $0057) // W
+beq t3,t2,cmd_handle_write
+nop
+
+// More commands to add: (L)ock, (U)nlock, (I)dentify
+
+j cmd_handle_end
+nop
+
+cmd_handle_echo:
+load_to_register(t1, $4543484F) // ECHO
+pi_write(t1, SC64_BUFFER_BASE + $0120)
+
+// Echo data
+addu a0,r0,s0
+jal sc64_send_usb
+nop
+
+j cmd_handle_end
+nop
+
+cmd_handle_read:
+load_to_register(t1, $52454144) // READ
+pi_write(t1, SC64_BUFFER_BASE + $0120)
+
+pi_read(t0, SC64_BUFFER_BASE + $0004) // Read start address in t0
+
+// Read value from main RAM, write to buffer
+lw t2, 0(t0)
+pi_write(t2, SC64_BUFFER_BASE + $0004)
+
+// Get length of data
+lw a0, $0010(sp)
+andi a0,a0,$01FF
+
+// Write header + data
+addiu a0,a0,4
+jal sc64_send_usb
+nop
+
+j cmd_handle_end
+nop
+
+cmd_handle_write:
+load_to_register(t1, $57524954) // WRIT
+pi_write(t1, SC64_BUFFER_BASE + $0120)
+
+j cmd_handle_end
+nop
+
+// addu s0,v1,r0 // Save bytes read to s0
+
+// // Increment and save call count of recv usb to buffer
+// pi_read(t0, SC64_BUFFER_BASE + 0x0028)
+// addiu t0,t0,1
+// pi_write(t0, SC64_BUFFER_BASE + 0x0028)
+
+// jal sc64_recv_usb
+// nop
+
+// pi_read(t0, SC64_BUFFER_BASE)
+// srl t0,t0,24
+// pi_write(t0, SC64_BUFFER_BASE + $0024)
+
+
+// srl t2,t0,24 // Isolate command byte
+// addiu t1,r0,$0052 // 'R'
+// beq t2,t1,cmd_handle_read
+// nop
+// addiu t1,r0,$0045 // 'E'
+// beq t2,t1,cmd_handle_echo
+// nop
+
+// // addiu t1,r0,$0057 // 'W'
+// // beq t0,t1,cmd_handle_write
+// // nop
+
+// j cmd_handle_end
+// nop
+
+// cmd_handle_read:
+// // load_to_register(t1, $52454144)
+// // sw t1, $0020(t0)
+// // lw a0, $0004(t0) // Read source address
+// // to_vram_address(a0)
+
+// // addiu a1,t0,8 // Destination address = BUFFER_BASE + 8
+
+// // // Copy from memory to receive buffer
+// // lh a2, $0002(t0) // Load length
+
+// // addu t1,r0,$0FFF
+// // and a2,a2,t1 // Keep lower 12 bits for length
+// // //sw a2, $0000(t0)
+// // //addiu a2,r0,2
+// // addiu s0,a2,8 // Copy the length + 8 for writeback
+// // jal bcopy
+// // nop
+
+// // lui t0, $BFFE
+// // lb t2, $0000(t0)
+// // ori t2,t2,$0020
+// // sb t2, $0000(t0)
+
+// // // Write back result
+// // jal sc64_send_usb
+// // addu a0,r0,s0
+
+// j cmd_handle_end
+// nop
+
+// cmd_handle_echo:
+// load_to_register(t1, $4543484F) // Echo
+// pi_write(t1, SC64_BUFFER_BASE + $0020)
+// // srl t2,t0,16
+// // and t2,t2,$00FF
+// // pi_write(t2, SC64_BUFFER_BASE + $0024) // Write frame ID
+
+
+
+// // jal sc64_send_usb
+// nop
+
+// j cmd_handle_end
+// nop
+
+// // cmd_handle_write:
+// // lui t0, $BFFE
+
+// // addiu a0,t0,8 // Source address = BUFFER_BASE + 8
+
+// // lw a1, $0004(t0) // Read destination address
+// // to_vram_address(a1)
+
+// // lhu a2, $0002(t0) // Load length
+// // andi a2,a2,$0FFF // Keep lower 12 bits for length
+
+// // jal bcopy
+// // nop
+
+// // // Write back result
+// // addiu a0,r0,CMD_USB_WRITE
+// // lui a1,$BFFE
+// // jal sc64_run_command
+// // addiu a2,r0,8 // Write back 8 bytes (skip data)
+
+// // // We're the last command, the jump is not useful
+// // //j cmd_handle_end
+// // //nop
+
+cmd_handle_end:
+
+// Check
+mfc0 t1, Count
+srl t1,t1,27
+beq s4,t1,sc64_main_loop
+nop
+
+addu s4,t1,r0
+
+lui t0,SC64_PREFIX
+load_to_register(t1, 0x41424344) // ABCD
+pi_wait(t2,t3)
+sw s4, AUX (t0)
+
+j sc64_main_loop
+nop
 
 sc64_thread_exit:
-lw ra, $0014(sp)
+lw ra, $001C(sp)
 addiu sp, sp, $20
 jr ra
 nop
 
-sc64_run_command:
-// sc64_run_command
-// a0 = command ID (lower 8 bits)
-// a1 = data 0 (command)
-// a2 = data 1 (command)
-// t0 = Success / Error
-// v0 = data 0 (result)
-// v1 = data 1 (result)
-lui t2, SC64_PREFIX
-pi_wait(t0, t1)
-sw a1, DATA0 (t2)
-pi_wait(t0, t1)
-sw a2, DATA1 (t2)
-andi a0,a0,$00FF
-pi_wait(t0, t1)
-sw a0, SCR (t2)
+sc64_recv_usb:
+// Receive USB data
+// a0 = size
 
-lui $8000, t3
+// Save registers
+addiu sp, sp, -$20
+sw ra, $001C(sp)
+
+// USB sc64_run_command(CMD_USB_READ, $BFEE0000, size)
+addu a2,r0,a0
+load_to_register(a0, CMD_USB_READ)
+load_to_register(a1, SC64_BUFFER_BASE)
+jal sc64_run_command
+nop
 
 -;
-pi_wait(t0, t1)
-lw t0, SCR(t2)
-and t4,t0,t3
-bne t4,r0,-
+// do {
+// status = sc64_run_command(CMD_USB_READ_STATUS, 0, 0)
+addiu a0,r0,CMD_USB_READ_STATUS
+addu a1,r0,r0
+addu a2,r0,r0
+jal sc64_run_command
 nop
 
-// Set t0 to -1 in case of error
-lui $4000,t3
-and t0,t0,t3
-beq t0,r0,+
+lui t0,$8000
+and v0,v0,t0
+bne v0,r0,-
 nop
-addiu t0,r0,$FFFF
-+;
+// } while((status & 0x80000000) != 0)
 
-pi_wait(t3, t4)
-lw v0, DATA0 (t2)
-pi_wait(t3, t4)
-lw v1, DATA1 (t2)
-
+// Restore registers
+lw ra, $001C(sp)
+addiu sp, sp, $20
 jr ra
 nop
+
+sc64_send_usb:
+// Send USB data
+// a0 = size
+
+// Save registers
+addiu sp, sp, -$20
+sw ra, $001C(sp)
+
+// sc64_run_command(CMD_USB_WRITE, $BFEE0000, size)
+addu a2,r0,a0
+load_to_register(a0, CMD_USB_WRITE)
+load_to_register(a1, SC64_BUFFER_BASE)
+jal sc64_run_command
+nop
+
+-;
+// do {
+// status = sc64_run_command(CMD_USB_WRITE_STATUS, 0, 0)
+addiu a0,r0,CMD_USB_WRITE_STATUS
+addu a1,r0,r0
+jal sc64_run_command
+addu a2,r0,r0
+
+lui t0,$8000
+and v0,v0,t0
+bne v0,r0,-
+nop
+// } while((status & 0x80000000) != 0)
+
+// Restore registers
+lw ra, $001C(sp)
+addiu sp, sp, $20
+jr ra
+nop
+
+include "src/sc64.asm"
 
 sc64_section_end:
 

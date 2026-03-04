@@ -101,6 +101,10 @@ constant f29 = 29
 constant f30 = 30
 constant f31 = 31
 
+// COP0 registers
+constant Count = 9
+
+
 // Memory Map
 constant RDRAM = $A000 // $00000000..$003FFFFF RDRAM Memory 4MB ($00000000..$007FFFFF 8MB With Expansion Pak)
 
