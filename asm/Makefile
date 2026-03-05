@@ -20,5 +20,5 @@ copy: rom.z64
 
 # Deploy to SC64 SD card
 deploy: rom.z64
-	$(SC64D) upload $^
+	$(SC64D) upload --save-type sram $^
 #	$(SC64D) sd upload $^

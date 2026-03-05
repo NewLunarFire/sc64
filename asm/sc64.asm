@@ -88,7 +88,7 @@ jal sc64_recv_usb
 nop
 
 pi_read(t0, SC64_BUFFER_BASE)
-sw t0, $0010(sp)
+sw t0, $0010(sp) // header_word
 
 srl t3,t0,24 // Command byte
 srl t4,t0,16
@@ -110,6 +110,9 @@ nop
 j cmd_handle_end
 nop
 
+////////////////////////////////////////////////////////////
+//                      ECHO Command                      //
+////////////////////////////////////////////////////////////
 cmd_handle_echo:
 load_to_register(t1, $4543484F) // ECHO
 pi_write(t1, SC64_BUFFER_BASE + $0120)
@@ -122,15 +125,28 @@ nop
 j cmd_handle_end
 nop
 
+////////////////////////////////////////////////////////////
+//                      READ Command                      //
+////////////////////////////////////////////////////////////
 cmd_handle_read:
 load_to_register(t1, $52454144) // READ
 pi_write(t1, SC64_BUFFER_BASE + $0120)
 
-pi_read(t0, SC64_BUFFER_BASE + $0004) // Read start address in t0
+pi_read(t0, SC64_BUFFER_BASE + $0004) // Read address start address in t0
+load_to_register(t1, SC64_BUFFER_BASE + $0004) // Buffer address start in t1
 
-// Read value from main RAM, write to buffer
-lw t2, 0(t0)
-pi_write(t2, SC64_BUFFER_BASE + $0004)
+lw t2, $0010(sp) // header_word
+andi t2,t2,$01FF // Length in t2
+
+read_loop:
+lw t3, 0(t0) // Read value from main RAM, write to buffer
+pi_write_ind(t3, t1) // Write to SC64 buffer
+
+addiu t0,t0,4 // Increment source address by 4
+addiu t1,t1,4 // Increment destination address by 4
+subiu t2,t2,4 // substract 4 from length
+bgtz t2, read_loop
+nop
 
 // Get length of data
 lw a0, $0010(sp)
@@ -151,106 +167,6 @@ pi_write(t1, SC64_BUFFER_BASE + $0120)
 j cmd_handle_end
 nop
 
-// addu s0,v1,r0 // Save bytes read to s0
-
-// // Increment and save call count of recv usb to buffer
-// pi_read(t0, SC64_BUFFER_BASE + 0x0028)
-// addiu t0,t0,1
-// pi_write(t0, SC64_BUFFER_BASE + 0x0028)
-
-// jal sc64_recv_usb
-// nop
-
-// pi_read(t0, SC64_BUFFER_BASE)
-// srl t0,t0,24
-// pi_write(t0, SC64_BUFFER_BASE + $0024)
-
-
-// srl t2,t0,24 // Isolate command byte
-// addiu t1,r0,$0052 // 'R'
-// beq t2,t1,cmd_handle_read
-// nop
-// addiu t1,r0,$0045 // 'E'
-// beq t2,t1,cmd_handle_echo
-// nop
-
-// // addiu t1,r0,$0057 // 'W'
-// // beq t0,t1,cmd_handle_write
-// // nop
-
-// j cmd_handle_end
-// nop
-
-// cmd_handle_read:
-// // load_to_register(t1, $52454144)
-// // sw t1, $0020(t0)
-// // lw a0, $0004(t0) // Read source address
-// // to_vram_address(a0)
-
-// // addiu a1,t0,8 // Destination address = BUFFER_BASE + 8
-
-// // // Copy from memory to receive buffer
-// // lh a2, $0002(t0) // Load length
-
-// // addu t1,r0,$0FFF
-// // and a2,a2,t1 // Keep lower 12 bits for length
-// // //sw a2, $0000(t0)
-// // //addiu a2,r0,2
-// // addiu s0,a2,8 // Copy the length + 8 for writeback
-// // jal bcopy
-// // nop
-
-// // lui t0, $BFFE
-// // lb t2, $0000(t0)
-// // ori t2,t2,$0020
-// // sb t2, $0000(t0)
-
-// // // Write back result
-// // jal sc64_send_usb
-// // addu a0,r0,s0
-
-// j cmd_handle_end
-// nop
-
-// cmd_handle_echo:
-// load_to_register(t1, $4543484F) // Echo
-// pi_write(t1, SC64_BUFFER_BASE + $0020)
-// // srl t2,t0,16
-// // and t2,t2,$00FF
-// // pi_write(t2, SC64_BUFFER_BASE + $0024) // Write frame ID
-
-
-
-// // jal sc64_send_usb
-// nop
-
-// j cmd_handle_end
-// nop
-
-// // cmd_handle_write:
-// // lui t0, $BFFE
-
-// // addiu a0,t0,8 // Source address = BUFFER_BASE + 8
-
-// // lw a1, $0004(t0) // Read destination address
-// // to_vram_address(a1)
-
-// // lhu a2, $0002(t0) // Load length
-// // andi a2,a2,$0FFF // Keep lower 12 bits for length
-
-// // jal bcopy
-// // nop
-
-// // // Write back result
-// // addiu a0,r0,CMD_USB_WRITE
-// // lui a1,$BFFE
-// // jal sc64_run_command
-// // addiu a2,r0,8 // Write back 8 bytes (skip data)
-
-// // // We're the last command, the jump is not useful
-// // //j cmd_handle_end
-// // //nop
-
 cmd_handle_end:
 
 // Check
@@ -262,7 +178,6 @@ nop
 addu s4,t1,r0
 
 lui t0,SC64_PREFIX
-load_to_register(t1, 0x41424344) // ABCD
 pi_wait(t2,t3)
 sw s4, AUX (t0)
 

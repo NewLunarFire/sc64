@@ -14,29 +14,6 @@ import tty
 import termios
 import time
 
-def reset_comm(ser: Serial):
-    ser.dtr = True
-
-    while not ser.dsr:
-        pass
-
-    ser.dtr = False
-    while ser.dsr:
-        pass
-
-def write_command(ser: Serial, command: str, arg1: int = 0, arg2: int = 0, data: Optional[bytes] = None):
-    buffer = bytearray()
-    buffer += b"CMD"
-    buffer += command[0].encode()
-    buffer += arg1.to_bytes(4, byteorder='big')
-    buffer += arg2.to_bytes(4, byteorder='big')
-    if data:
-        buffer += data
-    
-    #print(buffer)
-    ser.write(buffer)
-    ser.flush()
-
 def oot_read_command(frame_id: int, length: int, address: int):
     buffer = bytearray()
     buffer += b'R'                                  # Command
@@ -102,6 +79,7 @@ def print_packet(ptype, id, data):
 
 def main():
     comm = Sc64Comm()
+    comm.connect("/dev/ttyUSB0")
     comm.add_callback(print_packet)
 
     # Open serial port

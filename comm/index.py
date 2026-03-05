@@ -1,78 +1,29 @@
-from decoder import Sc64Comm
-from serial import Serial
-from typing import Optional
-import time
+from src.sc64.comm import Sc64Comm
+from src.oot.comm import OotComm
 
-
-
-def reset_comm(ser: Serial):
-    ser.dtr = True
-
-    while not ser.dsr:
-        pass
-
-    ser.dtr = False
-    while ser.dsr:
-        pass
-
-def write_command(ser: Serial, command: str, arg1: int = 0, arg2: int = 0, data: Optional[bytes] = None):
-    buffer = bytearray()
-    buffer += b"CMD"
-    buffer += command[0].encode()
-    buffer += arg1.to_bytes(4, byteorder='big')
-    buffer += arg2.to_bytes(4, byteorder='big')
-    if data:
-        buffer += data
-    
-    print(buffer)
-    ser.write(buffer)
-    ser.flush()
-
-def oot_read_command(frame_id: int, length: int, address: int):
-    buffer = bytearray()
-    buffer += b'R'                                  # Command
-    buffer += frame_id.to_bytes(1)                  # Frame id
-    buffer += length.to_bytes(2, byteorder='big')   # Length
-    buffer += address.to_bytes(4, byteorder='big')  # Address
-    return buffer
+save_context = 0x8011A5D0
+zeldaz = 0x001C
+rupees = 0x0034
 
 def main():
-    comm = Sc64Comm()
-    ser = Serial("/dev/ttyUSB0", timeout=1)
+    #comm = Sc64Comm()
+    comm = OotComm()
 
-    print("ttyUSB0 opened")
-
-    reset_comm(ser)
-
-    print("Reset done")
-
-    #write_command(ser, 'v')
-
-    #res = ser.read(12)
-
-    frame_id = 1
+    if not comm.connect():
+        print("Device not available")
+        return
     
-    
-    # Get current time in nanoseconds and convert to milliseconds
-    ms = time.time_ns() // 1_000_000
+    res = comm.read_memory(address=save_context + zeldaz, size=6)
 
-    buffer = oot_read_command(frame_id=frame_id, length=2, address=0x8011A604)
-    print(buffer)
-    write_command(ser, 'U', 1, len(buffer), buffer)
+    # comm.read_memory(address=0x8011A604, size=2)
+
+    #res = comm.write_memory(address=0x05000000, data=bytes([x for x in range(0,32)]))    
+    #print(res)
+    #res = comm.read_memory(address=0x05000000, size=32)
+    #print(res)
 
     while True:
-        res = ser.read(10)
-        comm.decode(res)
-
-        # if (time.time_ns() // 1_000_000) - ms > 3000:
-        #     ms = time.time_ns() // 1_000_000
-                
-        #     # Read Rupee count
-        #     buffer = oot_read_command(frame_id=frame_id, length=2, address=0x8011A604)
-        #     print(buffer)
-        #     write_command(ser, 'U', 1, len(buffer), buffer)
-
-        #     frame_id = (frame_id + 1) % 256
+        comm.sc64.read()
 
 if __name__ == "__main__":
     main()
