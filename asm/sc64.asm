@@ -7,9 +7,8 @@ include "lib/sc64.inc"      // Include Summercart 64 definitions
 include "lib/macros.inc"    // Macros
 include "lib/variables.inc" // Variables related to hooking / dmadata
 
-
-origin sc64_thread_vrom
-base sc64_thread_vram
+origin sc64_file_vrom
+base sc64_file_vram
 
 // sc64 thread code
 sc64_section_start:
@@ -64,7 +63,7 @@ srl s4,s4,27
 sc64_main_loop:
 // Link tunic color (801DAB6C)
 lui t3, $801E
-addiu t0,r0,5
+addiu t0,r0,$70
 sb t0, $AB6C(t3)
 
 // Read USB status
@@ -293,64 +292,9 @@ include "src/sc64.asm"
 sc64_section_end:
 
 // Calculate size of code section for dma table
-constant sc64_thread_vrom_size = sc64_section_end - sc64_section_start
-origin dmadata + (dmadata_index * $10)
-dw sc64_thread_vrom, sc64_thread_vrom_size + sc64_thread_vrom , sc64_thread_vrom, 0
+constant sc64_file_vrom_size = sc64_section_end - sc64_section_start
+origin dmadata_vrom + (dmadata_index * $10)
+dw sc64_file_vrom, sc64_file_vrom_size + sc64_file_vrom , sc64_file_vrom, 0
 
-// sc64 init code
-origin $b78aec
-base $80102B8C
-
-sc64_init:
-// Replace previous instruction
-jal $80005EC0
-nop
-
-// DMA SC64 code
-load_to_register(a0, sc64_thread_vram)
-load_to_register(a1, sc64_thread_vrom)
-load_to_register(a2, sc64_thread_vrom_size)
-jal dma_load_file
-nop
-
-// init stack
-load_to_register(a0, sc64_stack_context)
-load_to_register(a1, sc64_stack_start)
-load_to_register(a2, sc64_stack_end)
-load_to_register(t9, 0x100)
-sw t9, $0010(sp)
-load_to_register(t0, thread_name)
-sw t0, $0014(sp)
-jal os_init_stack
-or a3, r0, r0
-
-// create thread
-load_to_register(a0, os_thread_pointer)
-load_to_register(a1, 42)
-load_to_register(a2, sc64_thread_vram)
-load_to_register(t1, sc64_stack_end)
-load_to_register(t2, 11)
-sw t1, $0010(sp)
-sw r0, $0014(sp)
-
-jal os_create_thread
-or a3, r0, r0
-
-// start thread
-load_to_register(a0, os_thread_pointer)
-jal os_start_thread
-nop
-
-// Return from hook
-j (hook_point+8)
-nop
-
-thread_name:
-db "sc64", 0
-
-// Hooking code
-origin (hook_point - code_ram + code_rom)
-base hook_point
-
-j sc64_init
-print "sc64_init: ", hex:sc64_init, "\n"
+include "src/init.asm"
+include "src/hook.asm"
