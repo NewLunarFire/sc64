@@ -59,6 +59,13 @@ class OotComm:
         if response:
             return response.data
 
+    def write_memory(self, address, data):
+        frame_id = self.get_and_increment_frame_id()
+        command = create_command('W', frame_id=frame_id, length=len(data), data=address.to_bytes(4, byteorder='big') + data)
+        self.__send_command(command)
+        response = self.__wait_response(frame_id)
+        return bool(response)
+
     def __send_command(self, data):
         self.sc64.send_usb(data)
     

@@ -1828,7 +1828,7 @@ function APreceive()
         curstate = STATE_UNINITIALIZED
         return
     elseif e == 'timeout' then
-        print("timeout")
+        -- print("timeout")
         return
     elseif e ~= nil then
         print(e)
