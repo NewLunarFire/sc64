@@ -160,9 +160,36 @@ nop
 j cmd_handle_end
 nop
 
+////////////////////////////////////////////////////////////
+//                     WRITE Command                      //
+////////////////////////////////////////////////////////////
 cmd_handle_write:
 load_to_register(t1, $57524954) // WRIT
 pi_write(t1, SC64_BUFFER_BASE + $0120)
+
+pi_read(t0, SC64_BUFFER_BASE + $0004) // Write address start address in t0
+load_to_register(t1, SC64_BUFFER_BASE + $0008) // Data buffer start in t1
+
+lw t2, $0010(sp) // header_word
+andi t2,t2,$01FF // Length in t2
+
+write_loop:
+// The write loops works on a per-byte basis
+// No worries to be had with alignment, but large reads could take much longer
+pi_wait(t8, t9)
+lb t3, 0(t1) // Read value from buffer, 
+sb t3, 0(t0) // Write to main RAM
+
+addiu t0,t0,1 // Increment source address by 1
+addiu t1,t1,1 // Increment destination address by 1
+subiu t2,t2,1 // substract 1 from length
+bgtz t2, write_loop
+nop
+
+// Reply with header + address
+addiu a0,r0,8
+jal sc64_send_usb
+nop
 
 j cmd_handle_end
 nop
@@ -276,7 +303,7 @@ base $80102B8C
 
 sc64_init:
 // Replace previous instruction
-jal $80005EC0  
+jal $80005EC0
 nop
 
 // DMA SC64 code

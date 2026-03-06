@@ -75,6 +75,11 @@ macro pi_write(variable reg, variable addr) {
     sw reg, addr & 0xFFFF (t7)  
 }
 
+macro pi_read_ind(variable reg, variable reg_addr) {
+    pi_wait(t8, t9)
+    lw reg, 0(reg_addr)  
+}
+
 macro pi_write_ind(variable reg, variable reg_addr) {
     pi_wait(t8, t9)
     sw reg, 0(reg_addr)  
