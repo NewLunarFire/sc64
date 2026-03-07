@@ -3,6 +3,7 @@
 bass-ubuntu/
 rn64crc/
 sc64-deployer/
+tools/
 
 # Hex files from diff tool
 *.hex
