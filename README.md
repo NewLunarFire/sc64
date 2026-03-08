@@ -28,10 +28,75 @@ Notes:
 - I have a lot of commented out code in my sc64.asm file. I think I'll clean this up after my initial commit in Git. I want to keep this as part of the history, so once the initial commit is done I can delete a lot of this and rely on Git history in the future.
 
 # comm
-A very basic communicator in Python. I used pyserial to read and write to the SC64 interface. Not much to say about this, especially considering the way the Lua connector is done.
+Communication code to read and write to memory of patched OOT Rom. The files are as follows:
+
+## Setup
+
+### 1. Create a virtual environment (Optional, but recommended)
+
+`python3 -m venv venv`
+
+### 2. Activate virtual environment
+
+`source venv/bin/activate`
+
+### 3. Install dependencies
+
+`pip install -r requirements.txt`
+
+### A. Run TCP Server
+
+`python server.py`
+
+This runs a TCP server that listens on port 37211. This format of the messages are json, there is a streaming json decoder that will try to decode the json as it comes in.
+
+### B. Run Websocket Server
+
+`python websocket.py`
+
+This runs a WebSocket server on port 8765 with the same commands as the TCP server. This is used by the tracker.
+
+## Server commands
+
+### Read Memory
+
+```json
+{
+    "func": "read",     // Read function
+    "addr": "11A5D0",   // Address to start reading from as an hexadecimal string. You can add 0x at the start but it is optional.
+                        // The address is automatically converted to an address in RDRAM (starts at 0x80000000)
+    "size": 32          // Length of data to read
+}
+```
+
+#### Response
+```json
+{
+    "data": "0123456789ABCDEF" 
+}
+```
+
+### Write Memory
+```json
+{
+    "func": "write",            // Write function
+    "addr": "11A5D0",           // Address to start writing to. Hexadecimal
+    "data": "0123456789ABCDEF"  // Data to write as an hexadecimal string
+}
+```
+
+#### Response
+```json
+{
+    "ack": true  // If we received a response to the write command. This should be that the write worked.
+}
+```
 
 # connector_oot
 In order not to have to rewrite the logic in another language I want to just want to reuse the current connector as much as possible and replace the calls to the BizHawk API to calls that will communicate with the SC64. This is not the greateast way to go about it but it should work for a Proof-of-Concept.
+
+# tracker
+A very early WIP tracker for Ocarina of Time that demonstrate the use of the websocket server.
 
 # Shout-outs
 A lot of the information I used during testing is thanks to the good folks who created [CloudModding OOT Wiki](https://wiki.cloudmodding.com/oot/Main_Page), so thanks a lot for your valuable treasure trove of information.
