@@ -25,60 +25,6 @@ class StreamingJsonDecoder:
 
         return data_list
 
-
-replacements = {
-    (0x801C8464, 4): b'\x80\x40\x00\x00',
-    (0x80400000, 4): b'\x80\x40\x00\x20',
-    (0x80400E9F, 4): b'\x03\x48\x0D\xAA',
-    (0x80400EAD, 1): b'\x01'
-}
-
-def run_command(command, comm):
-    if command['func'] == 'read':
-        address = int(command['addr'], 16) | 0x80000000
-        size = int(command['size'])
-
-        is_connected = bool(comm.sc64.serial)
-        print(f"is_connected: {is_connected}")
-
-        if not is_connected:
-            if (address, size) in replacements:
-                res = replacements[(address, size)]
-            else:
-                res = bytes([x for x in range(0, size)])
-            
-            return { "data": res.hex() }
-
-        offset = address & 0x03
-
-        res = None
-        if offset != 0:
-            print(f"Unaligned memory access! offset = {offset}")
-
-            address = address & 0xFFFFFFFC
-            res = comm.read_memory(address=address, size=size+4)
-            res = res[offset:offset+size]
-        else:
-            res = comm.read_memory(address=address, size=size)
-        
-        print(res)
-        if not res:
-            return {"err": "failed"}
-        return { "data": res.hex() }
-    elif command['func'] == 'write':
-        address = int(command['addr'], 16) | 0x80000000
-        data = bytes.fromhex(command['addr'])
-        is_connected = bool(comm.sc64.serial)
-
-        ack = False
-        if is_connected:
-            ack = comm.write_memory(address=address, data=data)
-
-        return {'ack': ack}
-    else:
-        return {'error': 'Invalid function'}
-    
-
 def run_server():
     comm = OotComm()
 

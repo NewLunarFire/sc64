@@ -1,10 +1,15 @@
 from .decoder import Sc64Decoder, PacketType
 from src.util import find_first
 from serial import Serial
+from serial.tools.list_ports import comports
 from serial.serialutil import SerialException
 from typing import Optional
 
+import struct
 import time
+
+def find_sc64():
+    return [port.device for port in comports() if port.serial_number and port.serial_number.startswith("SC64")]
 
 class Sc64Comm:
     def __init__(self):
@@ -17,12 +22,21 @@ class Sc64Comm:
         self.on_data_flushed = None
         pass
 
-    def connect(self, file="/dev/ttyUSB0"):
+    def connect(self, file=None):
         if self.serial:
             return True
         
+        if not file:
+            # Try to connect to any found SC64
+            for port in find_sc64():
+                if self.connect(port):
+                    return True
+            
+            return False
+        
         try:
             self.serial = Serial(file, timeout=0)
+            print(f"Summercart64 connected on {file}")
         except SerialException as se:
             print(se)
             return False
@@ -33,6 +47,22 @@ class Sc64Comm:
     def is_connected(self):
         return bool(self.serial)
 
+    def get_identifier(self):
+        self.__write_command('v')
+        packet = self.__wait_response('v')
+
+        return packet.data.decode('utf-8')
+
+    def get_version(self):
+        self.__write_command('V')
+        packet = self.__wait_response('V')
+
+        if packet:
+            major, minor,revision = struct.unpack(">hhl", packet.data)
+            return f"{major}.{minor}.{revision}"
+
+        return None
+    
     def read_memory(self, address, size):
         if not self.serial:
             raise "Not connected to SC64"

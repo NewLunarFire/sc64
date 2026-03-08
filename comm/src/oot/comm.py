@@ -29,10 +29,10 @@ def create_command(command_id: bytes, frame_id: int, length: int, data: bytearra
     return buffer
 
 class OotComm:
-    def __init__(self):
-        self.sc64 = Sc64Comm()
+    def __init__(self, sc64=Sc64Comm()):
         self.responses = []
         
+        self.sc64 = sc64
         self.sc64.on_usb_data = self.on_usb_data
         self.sc64.on_data_flushed = lambda : print("Data flushed")
 
