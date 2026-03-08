@@ -1,0 +1,75 @@
+<html>
+    <head>
+        <title>OOT Tracker</title>
+        <script src="tracker.js"></script>
+        <style type="text/css">
+            .sprite-container {
+                display: flex;
+                flex-direction: row;
+                gap: 2px;
+            }
+            .sprite {
+                position: relative;
+                border: 1px solid black;
+                width: 32px;
+                height: 32px;
+                background-image: url('sprites.png');
+            }
+            .deku-stick {
+                background-position: 0 0;
+            }
+            .deku-nuts {
+                background-position: -32px 0;
+            }
+            .bombs {
+                background-position: -64px 0;
+            }
+            .bow {
+                background-position: -96px 0;
+            }
+            .quantity {
+                color: white;
+                font-weight: bold;
+                -webkit-text-stroke: 0.5px black;
+
+                position: absolute;
+                bottom: 0;
+                right: 0;
+                padding: 0px;
+            }
+
+            #memorycontent {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            #memorycontent > * {
+                flex-basis: calc((100% / 8) - 10px);
+                flex-grow: 1;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>OOT SC64 tracker</h1>
+        <div class="sprite-container">
+            <div class="sprite deku-stick">
+                <span class="quantity">10</span>
+            </div>
+            <div class="sprite deku-nuts">
+                <span class="quantity">10</span>
+            </div>
+            <div class="sprite bombs">
+                <span class="quantity">10</span>
+            </div>
+            <div class="sprite bow">
+                <span class="quantity">10</span>
+            </div>
+        </div>
+        <h2>Memory Content</h2>
+        <div id="memorycontent">
+
+        </div>
+    </body>
+</html>
